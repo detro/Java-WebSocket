@@ -7,6 +7,7 @@ import java.nio.channels.NotYetConnectedException;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Date;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -32,6 +33,7 @@ import org.java_websocket.handshake.Handshakedata;
 import org.java_websocket.handshake.ServerHandshake;
 import org.java_websocket.handshake.ServerHandshakeBuilder;
 import org.java_websocket.util.Charsetfunctions;
+import org.java_websocket.WebSocketListener.MessageType;
 
 /**
  * Represents one end (client or server) of a single WebSocket connection.
@@ -157,6 +159,8 @@ public final class WebSocket {
 	 * @throws InterruptedException
 	 */
 	/*package public*/void handleRead() throws IOException {
+		Date receiveThenSendStartTime = new Date();
+
 		if( !socketBuffer.hasRemaining() ) {
 			socketBuffer.rewind();
 			socketBuffer.limit( socketBuffer.capacity() );
@@ -193,6 +197,7 @@ public final class WebSocket {
 						return;
 					}
 				}
+
 				HandshakeState handshakestate = null;
 				socketBuffer.mark();
 				try {
@@ -210,6 +215,9 @@ public final class WebSocket {
 									ClientHandshake handshake = (ClientHandshake) tmphandshake;
 									handshakestate = d.acceptHandshakeAsServer( handshake );
 									if( handshakestate == HandshakeState.MATCHED ) {
+										// timing callback
+										wsl.messageReceiveTiming( receiveThenSendStartTime, new Date(), MessageType.HANDSHAKE, socketBuffer.limit() );
+
 										ServerHandshakeBuilder response;
 										try {
 											response = wsl.onWebsocketHandshakeReceivedAsServer( this, d, handshake );
@@ -217,7 +225,16 @@ public final class WebSocket {
 											closeConnection( e.getCloseCode(), e.getMessage(), false );
 											return;
 										}
-										writeDirect( d.createHandshake( d.postProcessHandshakeResponseAsServer( handshake, response ), role ) );
+										// Reset timer for sending the handshake response back
+										receiveThenSendStartTime = new Date();
+
+										// Send Handshake Response back
+										Handshakedata handshakeResponse = d.postProcessHandshakeResponseAsServer(handshake, response);
+										writeDirect( d.createHandshake( handshakeResponse, role ) );
+
+										// timing callback
+										wsl.messageSendTiming( receiveThenSendStartTime, new Date(), MessageType.HANDSHAKE, handshakeResponse.getContent() != null ? handshakeResponse.getContent().length : 0 );
+
 										draft = d;
 										open( handshake );
 										handleRead();
@@ -255,10 +272,13 @@ public final class WebSocket {
 							handshakestate = draft.acceptHandshakeAsServer( handshake );
 
 							if( handshakestate == HandshakeState.MATCHED ) {
+								// timing callback
+								wsl.messageReceiveTiming( receiveThenSendStartTime, new Date(), MessageType.HANDSHAKE, socketBuffer.limit() );
+
 								open( handshake );
 								handleRead();
 							} else if( handshakestate != HandshakeState.MATCHING ) {
-								close( CloseFrame.PROTOCOL_ERROR, "the handshake did finaly not match" );
+								close( CloseFrame.PROTOCOL_ERROR, "the handshake did finally not match" );
 							}
 							return;
 						}
@@ -266,12 +286,15 @@ public final class WebSocket {
 						draft.setParseMode( role );
 						Handshakedata tmphandshake = draft.translateHandshake( socketBuffer );
 						if( tmphandshake instanceof ServerHandshake == false ) {
-							closeConnection( CloseFrame.PROTOCOL_ERROR, "Wwrong http function", false );
+							closeConnection( CloseFrame.PROTOCOL_ERROR, "Wrong http function", false );
 							return;
 						}
 						ServerHandshake handshake = (ServerHandshake) tmphandshake;
 						handshakestate = draft.acceptHandshakeAsClient( handshakerequest, handshake );
 						if( handshakestate == HandshakeState.MATCHED ) {
+							// timing callback
+							wsl.messageReceiveTiming( receiveThenSendStartTime, new Date(), MessageType.HANDSHAKE, socketBuffer.limit() );
+
 							try {
 								wsl.onWebsocketHandshakeReceivedAsClient( this, handshakerequest, handshake );
 							} catch ( InvalidDataException e ) {
@@ -306,6 +329,9 @@ public final class WebSocket {
 								code = cf.getCloseCode();
 								reason = cf.getMessage();
 							}
+							// timing callback
+							wsl.messageReceiveTiming( receiveThenSendStartTime, new Date(), MessageType.CLOSE, socketBuffer.limit() );
+
 							if( closeHandshakeSent ) {
 								// complete the close handshake by disconnecting
 								closeConnection( code, reason, true );
@@ -328,6 +354,9 @@ public final class WebSocket {
 								if( f.getOpcode() == Opcode.CONTINIOUS ) {
 									throw new InvalidFrameException( "unexpected continious frame" );
 								} else if( f.isFin() ) {
+									// timing callback
+									wsl.messageReceiveTiming( receiveThenSendStartTime, new Date(), f.getOpcode() == Opcode.BINARY ? MessageType.BINARY : MessageType.TEXT, socketBuffer.limit() );
+
 									// receive normal onframe message
 									deliverMessage( f );
 								} else {
@@ -337,6 +366,9 @@ public final class WebSocket {
 							} else if( f.getOpcode() == Opcode.CONTINIOUS ) {
 								currentframe.append( f );
 								if( f.isFin() ) {
+									// timing callback
+									wsl.messageReceiveTiming( receiveThenSendStartTime, new Date(), f.getOpcode() == Opcode.BINARY ? MessageType.BINARY : MessageType.TEXT, socketBuffer.limit() );
+
 									deliverMessage( currentframe );
 									currentframe = null;
 								}
@@ -371,19 +403,26 @@ public final class WebSocket {
 	public void closeDirect( int code, String message ) throws IOException {
 		if( !closeHandshakeSent ) {
 			if( handshakeComplete ) {
+				Date closeMessageSendStartTime = new Date();
+
 				if( code == CloseFrame.ABNROMAL_CLOSE ) {
 					closeConnection( code, true );
 					closeHandshakeSent = true;
 					return;
 				}
 				flush();
+
 				if( draft.getCloseHandshakeType() != CloseHandshakeType.NONE ) {
+					Framedata frameData = null;
 					try {
-						sendFrameDirect( new CloseFrameBuilder( code, message ) );
+						frameData = new CloseFrameBuilder( code, message );
+						sendFrameDirect(frameData);
 					} catch ( InvalidDataException e ) {
 						wsl.onWebsocketError( this, e );
 						closeConnection( CloseFrame.ABNROMAL_CLOSE, "generated frame is invalid", false );
 					}
+					// timing callback
+					wsl.messageSendTiming( closeMessageSendStartTime, new Date(), MessageType.CLOSE, frameData.getPayloadData().length );
 				} else {
 					closeConnection( code, false );
 				}
@@ -502,17 +541,30 @@ public final class WebSocket {
 	 * Empty the internal buffer, sending all the pending data before continuing.
 	 */
 	public void flush() throws IOException {
+		Date sentStartTime = new Date();
 		ByteBuffer buffer = this.bufferQueue.peek();
+
 		while ( buffer != null ) {
 			sockchannel.write( buffer );
 			if( buffer.remaining() > 0 ) {
+				// there is still stuff to send for this buffer
 				continue;
 			} else {
+				// nothing left for this buffer
 				synchronized ( bufferQueueTotalAmount ) {
 					// subtract this amount of data from the total queued (synchronized over this object)
 					bufferQueueTotalAmount -= buffer.limit();
 				}
-				this.bufferQueue.poll(); // Buffer finished. Remove it.
+
+				// timing callback
+				if ( isConnecting() ) {
+					wsl.messageSendTiming( sentStartTime, new Date(), MessageType.HANDSHAKE, buffer.limit() );
+				} else if ( isOpen() ) {
+					// TODO - We don't have yet a way to know if we are sending "text" or "binary" at this point
+					wsl.messageSendTiming( sentStartTime, new Date(), MessageType.TEXT, buffer.limit() );
+				} //< the "close()" message is handled slightly differently because of it's nature
+
+				this.bufferQueue.poll(); //< Buffer finished. Remove it.
 				buffer = this.bufferQueue.peek();
 			}
 		}
@@ -551,13 +603,13 @@ public final class WebSocket {
 			throw new InvalidHandshakeException( "Handshake data rejected by client." );
 		}
 
-		// Send
-		channelWrite( draft.createHandshake( this.handshakerequest, role ) );
+		channelWrite( draft.createHandshake( this.handshakerequest, role ) ); //< queue to be sent
 	}
 
 	private void channelWrite( ByteBuffer buf ) throws InterruptedException {
 		if( DEBUG )
 			System.out.println( "write(" + buf.limit() + "): {" + ( buf.limit() > 1000 ? "too big to display" : new String( buf.array() ) ) + "}" );
+
 		buf.rewind(); // TODO rewinding should not be nessesary
 		synchronized ( bufferQueueTotalAmount ) {
 			// add up the number of bytes to the total queued (synchronized over this object)

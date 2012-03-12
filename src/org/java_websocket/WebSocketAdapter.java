@@ -11,6 +11,8 @@ import org.java_websocket.handshake.Handshakedata;
 import org.java_websocket.handshake.ServerHandshake;
 import org.java_websocket.handshake.ServerHandshakeBuilder;
 
+import java.util.Date;
+
 public abstract class WebSocketAdapter implements WebSocketListener {
 
 	/**
@@ -53,7 +55,7 @@ public abstract class WebSocketAdapter implements WebSocketListener {
 	/**
 	 * This default implementation does not do anything. Go ahead and overwrite it.
 	 * 
-	 * @see @see org.java_websocket.WebSocketListener#onWebsocketOpen(WebSocket, Handshakedata)
+	 * @see org.java_websocket.WebSocketListener#onWebsocketOpen(WebSocket, Handshakedata)
 	 */
 	@Override
 	public void onWebsocketOpen( WebSocket conn, Handshakedata handshake ) {
@@ -62,7 +64,7 @@ public abstract class WebSocketAdapter implements WebSocketListener {
 	/**
 	 * This default implementation does not do anything. Go ahead and overwrite it.
 	 * 
-	 * @see @see org.java_websocket.WebSocketListener#onWebsocketClose(WebSocket, int, String, boolean)
+	 * @see org.java_websocket.WebSocketListener#onWebsocketClose(WebSocket, int, String, boolean)
 	 */
 	@Override
 	public void onWebsocketClose( WebSocket conn, int code, String reason, boolean remote ) {
@@ -71,7 +73,7 @@ public abstract class WebSocketAdapter implements WebSocketListener {
 	/**
 	 * This default implementation does not do anything. Go ahead and overwrite it.
 	 * 
-	 * @see @see org.java_websocket.WebSocketListener#onWebsocketMessage(WebSocket, byte[])
+	 * @see org.java_websocket.WebSocketListener#onWebsocketMessage(WebSocket, byte[])
 	 */
 	@Override
 	public void onWebsocketMessage( WebSocket conn, byte[] blob ) {
@@ -81,7 +83,7 @@ public abstract class WebSocketAdapter implements WebSocketListener {
 	 * This default implementation will send a pong in response to the received ping.
 	 * The pong frame will have the same payload as the ping frame.
 	 * 
-	 * @see @see org.java_websocket.WebSocketListener#onWebsocketPing(WebSocket, Framedata)
+	 * @see org.java_websocket.WebSocketListener#onWebsocketPing(WebSocket, Framedata)
 	 */
 	@Override
 	public void onWebsocketPing( WebSocket conn, Framedata f ) {
@@ -97,7 +99,7 @@ public abstract class WebSocketAdapter implements WebSocketListener {
 	/**
 	 * This default implementation does not do anything. Go ahead and overwrite it.
 	 * 
-	 * @see @see org.java_websocket.WebSocketListener#onWebsocketPong(WebSocket, Framedata)
+	 * @see org.java_websocket.WebSocketListener#onWebsocketPong(WebSocket, Framedata)
 	 */
 	@Override
 	public void onWebsocketPong( WebSocket conn, Framedata f ) {
@@ -124,10 +126,34 @@ public abstract class WebSocketAdapter implements WebSocketListener {
 	/**
 	 * This default implementation does not do anything. Go ahead and overwrite it.
 	 * 
-	 * @see @see org.java_websocket.WebSocketListener#onWebsocketError(WebSocket, Exception)
+	 * @see org.java_websocket.WebSocketListener#onWebsocketError(WebSocket, Exception)
 	 */
 	@Override
 	public void onWebsocketError( WebSocket conn, Exception ex ) {
+	}
+
+	/** This default implementation does not do anything. Go ahead and overwrite it.
+	 *
+	 * @see org.java_websocket.WebSocketListener#connectTiming(Date startTime, Date endTime)
+	 */
+	@Override
+	public void connectTiming( Date startTime, Date endTime ) {
+	}
+
+	/** This default implementation does not do anything. Go ahead and overwrite it.
+	 *
+	 * @see org.java_websocket.WebSocketListener#messageSendTiming(Date startTime, Date endTime, MessageType type, int bytesAmount)
+	 */
+	@Override
+	public void messageSendTiming( Date startTime, Date endTime, MessageType type, int bytesAmount ) {
+	}
+
+	/** This default implementation does not do anything. Go ahead and overwrite it.
+	 *
+	 * @see org.java_websocket.WebSocketListener#messageReceiveTiming(Date startTime, Date endTime, MessageType type, int bytesAmount)
+	 */
+	@Override
+	public void messageReceiveTiming( Date startTime, Date endTime, MessageType type, int bytesAmount ) {
 	}
 
 }

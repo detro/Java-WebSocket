@@ -9,6 +9,7 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.UnresolvedAddressException;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.locks.Lock;
@@ -111,7 +112,6 @@ public abstract class WebSocketClient extends WebSocketAdapter implements Runnab
 				selector.wakeup();
 			closelock.unlock();
 		}
-
 	}
 
 	/**
@@ -155,6 +155,8 @@ public abstract class WebSocketClient extends WebSocketAdapter implements Runnab
 	}
 
 	protected final void interruptableRun() {
+		Date connectStartTime = new Date();
+
 		try {
 			tryToConnect( new InetSocketAddress( uri.getHost(), getPort() ) );
 		} catch ( ClosedByInterruptException e ) {
@@ -170,6 +172,8 @@ public abstract class WebSocketClient extends WebSocketAdapter implements Runnab
 			onWebsocketError( conn, e );
 			return;
 		}
+		connectTiming(connectStartTime, new Date()); //< timing callback
+
 		conn = new WebSocket( this, draft, client );
 		try/*IO*/{
 			while ( !conn.isClosed() ) {
@@ -364,5 +368,6 @@ public abstract class WebSocketClient extends WebSocketAdapter implements Runnab
 	public abstract void onClose( int code, String reason, boolean remote );
 	public abstract void onError( Exception ex );
 	public void onMessage( byte[] bytes ) {
-	};
+	}
+
 }

@@ -8,12 +8,16 @@ import org.java_websocket.handshake.Handshakedata;
 import org.java_websocket.handshake.ServerHandshake;
 import org.java_websocket.handshake.ServerHandshakeBuilder;
 
+import java.util.Date;
+
 /**
  * Implemented by <tt>WebSocketClient</tt> and <tt>WebSocketServer</tt>.
  * The methods within are called by <tt>WebSocket</tt>.
  * Almost every method takes a first parameter conn which represents the source of the respective event.
  */
 public interface WebSocketListener {
+
+	enum MessageType { HANDSHAKE, CLOSE, TEXT, BINARY }
 
 	/**
 	 * Called on the server side when the socket connection is first established, and the WebSocket
@@ -132,4 +136,50 @@ public interface WebSocketListener {
 
 	/** This method is used to inform the selector thread that there is data queued to be written to the socket. */
 	public void onWriteDemand( WebSocket conn );
+
+	/** Informs the Listener how long it took to open a socket connection
+	 *
+	 * @param startTime
+	 *      Time at which the socket started connecting
+	 *
+	 * @param endTime
+	 *      Time at which the socket connection was established
+	 */
+	public void connectTiming( Date startTime, Date endTime );
+
+	/** Informs the Listener how long it took to send a Message.
+	 * This will also inform about how long it took to send the initial WebSocket HTTP Handshake.
+	 *
+	 * @param startTime
+	 *      Time at which it started sending a message
+	 *
+	 * @param endTime
+	 *      Time at which if finished sending that message
+	 *
+	 * @param type
+	 *      Type of message sent
+	 *
+	 * @param bytesAmount
+	 *      Amount of bytes sent
+	 */
+	public void messageSendTiming( Date startTime, Date endTime, MessageType type, int bytesAmount );
+
+	/** Informs the Listener how long it took to receive a Message.
+	 * This will also inform about how long it took to receive the initial WebSocket HTTP Handshake.
+	 * Time is measured from when data are ready/waiting to be read on the socket.
+	 *
+	 * @param startTime
+	 *      Time at which it started receiving a message
+	 *
+	 * @param endTime
+	 *      Time at which if finished receiving that message
+	 *
+	 * @param type
+	 *      Type of message sent
+	 *
+	 * @param bytesAmount
+	 *      Amount of bytes received
+	 */
+	public void messageReceiveTiming( Date startTime, Date endTime, MessageType type, int bytesAmount );
+
 }
