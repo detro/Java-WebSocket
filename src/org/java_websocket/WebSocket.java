@@ -11,6 +11,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.java_websocket.drafts.Draft;
 import org.java_websocket.drafts.Draft.CloseHandshakeType;
@@ -57,6 +58,8 @@ public final class WebSocket {
 	public static final int READY_STATE_CLOSING = 2;
 	public static final int READY_STATE_CLOSED = 3;
 
+	public static int BUFFERSIZE = 512;
+
 	/**
 	 * The default port of WebSockets, as defined in the spec. If the nullary
 	 * constructor is used, DEFAULT_PORT will be the port the WebSocketServer
@@ -92,11 +95,12 @@ public final class WebSocket {
 	 * Queue of buffers that need to be sent to the client.
 	 */
 	private BlockingQueue<ByteBuffer> bufferQueue;
+
 	/**
 	 * The amount of bytes still in queue to be sent, at every given time.
 	 * It's updated at every send/sent operation.
 	 */
-	private Long bufferQueueTotalAmount = (long) 0;
+	private AtomicLong bufferQueueTotalAmount = new AtomicLong( 0l );
 
 	private Draft draft = null;
 
@@ -143,7 +147,7 @@ public final class WebSocket {
 	private void init( WebSocketListener listener, Draft draft, SocketChannel socketchannel ) {
 		this.sockchannel = socketchannel;
 		this.bufferQueue = new LinkedBlockingQueue<ByteBuffer>( 3 );
-		this.socketBuffer = ByteBuffer.allocate( 65558 );
+		this.socketBuffer = ByteBuffer.allocate( BUFFERSIZE );
 		socketBuffer.flip();
 		this.wsl = listener;
 		this.role = Role.CLIENT;
@@ -485,7 +489,7 @@ public final class WebSocket {
 	 * @throws InterruptedException
 	 * @throws NotYetConnectedException
 	 */
-	public void send( String text ) throws IllegalArgumentException , NotYetConnectedException , InterruptedException {
+	public void send( String text ) throws NotYetConnectedException , InterruptedException {
 		if( text == null )
 			throw new IllegalArgumentException( "Cannot send 'null' data to a WebSocket." );
 		send( draft.createFrames( text, role == Role.CLIENT ) );
@@ -498,10 +502,14 @@ public final class WebSocket {
 	 * @throws InterruptedException
 	 * @throws NotYetConnectedException
 	 */
-	public void send( byte[] bytes ) throws IllegalArgumentException , NotYetConnectedException , InterruptedException {
+	public void send( ByteBuffer bytes ) throws IllegalArgumentException , NotYetConnectedException , InterruptedException {
 		if( bytes == null )
 			throw new IllegalArgumentException( "Cannot send 'null' data to a WebSocket." );
 		send( draft.createFrames( bytes, role == Role.CLIENT ) );
+	}
+
+	public void send( byte[] bytes ) throws IllegalArgumentException , NotYetConnectedException , InterruptedException {
+		send( ByteBuffer.wrap( bytes ) );
 	}
 
 	private void send( Collection<Framedata> frames ) throws InterruptedException {
@@ -534,7 +542,7 @@ public final class WebSocket {
 	 * @return Amount of Data still in Queue and not sent yet of the socket
 	 */
 	long bufferedDataAmount() {
-		return bufferQueueTotalAmount;
+		return bufferQueueTotalAmount.get();
 	}
 
 	/**
@@ -545,16 +553,13 @@ public final class WebSocket {
 		ByteBuffer buffer = this.bufferQueue.peek();
 
 		while ( buffer != null ) {
-			sockchannel.write( buffer );
+			int written = sockchannel.write( buffer );
 			if( buffer.remaining() > 0 ) {
 				// there is still stuff to send for this buffer
 				continue;
 			} else {
-				// nothing left for this buffer
-				synchronized ( bufferQueueTotalAmount ) {
-					// subtract this amount of data from the total queued (synchronized over this object)
-					bufferQueueTotalAmount -= buffer.limit();
-				}
+				// subtract this amount of data from the total queued (synchronized over this object)
+				bufferQueueTotalAmount.addAndGet( -written );
 
 				// timing callback
 				if ( isConnecting() ) {
@@ -608,13 +613,11 @@ public final class WebSocket {
 
 	private void channelWrite( ByteBuffer buf ) throws InterruptedException {
 		if( DEBUG )
-			System.out.println( "write(" + buf.limit() + "): {" + ( buf.limit() > 1000 ? "too big to display" : new String( buf.array() ) ) + "}" );
+			System.out.println( "write(" + buf.remaining() + "): {" + ( buf.remaining() > 1000 ? "too big to display" : new String( buf.array() ) ) + "}" );
 
-		buf.rewind(); // TODO rewinding should not be nessesary
-		synchronized ( bufferQueueTotalAmount ) {
-			// add up the number of bytes to the total queued (synchronized over this object)
-			bufferQueueTotalAmount += buf.limit();
-		}
+		// add up the number of bytes to the total queued (synchronized over this object)
+		bufferQueueTotalAmount.addAndGet( buf.remaining() );
+
 		if( !bufferQueue.offer( buf ) ) {
 			try {
 				flush();
