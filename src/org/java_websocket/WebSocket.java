@@ -418,15 +418,17 @@ public final class WebSocket {
 
 				if( draft.getCloseHandshakeType() != CloseHandshakeType.NONE ) {
 					Framedata frameData = null;
+                    int frameDataPayloadSize = 0;
 					try {
 						frameData = new CloseFrameBuilder( code, message );
+                        frameDataPayloadSize = frameData.getPayloadData().remaining();
 						sendFrameDirect(frameData);
 					} catch ( InvalidDataException e ) {
 						wsl.onWebsocketError( this, e );
 						closeConnection( CloseFrame.ABNROMAL_CLOSE, "generated frame is invalid", false );
 					}
 					// timing callback
-					wsl.messageSendTiming( closeMessageSendStartTime, new Date(), MessageType.CLOSE, frameData.getPayloadData().length );
+					wsl.messageSendTiming( closeMessageSendStartTime, new Date(), MessageType.CLOSE, frameDataPayloadSize );
 				} else {
 					closeConnection( code, false );
 				}
